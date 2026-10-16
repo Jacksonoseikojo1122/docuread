@@ -1,0 +1,38 @@
+{
+  "name": "docuread",
+  "version": "0.1.0",
+  "description": "Turn receipts, invoices and certificates into clean JSON, with confidence scores and a human review queue.",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest run",
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "eval": "tsx eval/run.ts",
+    "fixtures": "tsx scripts/make-fixtures.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Jacksonoseikojo1122/docuread.git"
+  },
+  "keywords": [],
+  "author": "Jackson Kojo Osei <jacksonoseikojo@gmail.com>",
+  "license": "MIT",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/Jacksonoseikojo1122/docuread/issues"
+  },
+  "homepage": "https://jacksonkojoosei.com/projects/docuread",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
+    "@hono/node-server": "^2.1.5",
+    "hono": "^4.13.13",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
