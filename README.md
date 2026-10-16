@@ -4,7 +4,9 @@ Turn receipts, invoices and certificates into clean JSON, with a confidence scor
 
 [![CI](https://github.com/Jacksonoseikojo1122/docuread/actions/workflows/ci.yml/badge.svg)](https://github.com/Jacksonoseikojo1122/docuread/actions/workflows/ci.yml)
 
-Project page: **https://jacksonkojoosei.com/projects/docuread**
+Project page: **https://jacksonkojoosei.com/projects/docuread** · **[Getting started](docs/getting-started.md)** · **[Integration guide](docs/integration.md)** · **[API reference](openapi.yaml)**
+
+![A receipt and the JSON DocuRead returns for it](docs/images/receipt-gh-supermarket.png)
 
 ## Why
 
@@ -16,6 +18,24 @@ AI models read documents well most of the time and confidently wrong some of the
 4. An **eval suite** measures how often a wrong answer slips through, so you can tell whether a new model or prompt made things better or worse.
 
 It grew out of the licence and certificate check I built for a US healthcare staffing platform.
+
+![How DocuRead works: document, Claude, rule checks, then accepted or review queue](docs/images/how-it-works.svg)
+
+## What you get back
+
+A receipt whose printed totals don't add up. Every number was read correctly, but 80.00 + 12.00 isn't 99.00, so it goes to a person:
+
+![A receipt with totals that don't add up, sent to review](docs/images/receipt-bad-totals.png)
+
+An invoice, every field confident and consistent, so it's accepted:
+
+![An invoice and its accepted fields](docs/images/invoice-gh-services.png)
+
+An expired certificate: read correctly and accepted, with the `expired` flag raised:
+
+![An expired certificate flagged as expired](docs/images/cert-expired.png)
+
+<sub>These images show example responses: the checks and decisions come from DocuRead's code, and the confidence values are illustrative until the first published eval run.</sub>
 
 ## The number that matters
 
@@ -36,6 +56,19 @@ curl -X POST http://localhost:8787/v1/extract \
 ```
 
 Each field comes back as `{ value, normalized, confidence, status, issues }`, plus a document-level `decision` of `accepted` or `needs_review`. Money is returned as integer minor units (pesewas, cents) so totals compare exactly.
+
+## Use it in your app
+
+The one rule: **only store `normalized` values from fields whose `status` is `accepted`.** Send the rest to a person. The [integration guide](docs/integration.md) has copy-paste clients for Node/TypeScript and Python, a Next.js upload handler, and how to build the review screen. Runnable examples are in [`examples/`](examples).
+
+| Docs | |
+| --- | --- |
+| [Getting started](docs/getting-started.md) | Install, first request, reading the decision |
+| [Integration guide](docs/integration.md) | Node/TypeScript, Python, base64 uploads, review screen, production checklist |
+| [How it works](docs/how-it-works.md) | The rule checks, the threshold, data handling |
+| [Evals](docs/evals.md) | Metrics, sample documents, adding your own |
+| [OpenAPI spec](openapi.yaml) | Full API reference, importable into Postman, Insomnia or code generators |
+| [llms.txt](llms.txt) | A short summary for AI coding assistants |
 
 ## API
 

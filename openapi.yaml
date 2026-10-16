@@ -1,0 +1,208 @@
+openapi: 3.1.0
+info:
+  title: DocuRead API
+  version: 0.1.0
+  summary: Turn receipts, invoices and certificates into validated JSON, with a human review queue.
+  description: |
+    Send a document image or PDF. DocuRead asks Claude to read each field and give a
+    confidence, then checks the answer with rules (real dates, money that parses,
+    subtotal + tax = total, sensible date order). Fields that are doubtful or fail a
+    check go to a review queue instead of being accepted.
+
+    Money is returned as integer minor units (pesewas, cents). Dates are ISO 8601.
+  contact:
+    name: Jackson Kojo Osei
+    url: https://jacksonkojoosei.com/projects/docuread
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: http://localhost:8787
+    description: Local (npm run dev)
+security:
+  - bearer: []
+paths:
+  /health:
+    get:
+      summary: Liveness check
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  model: { type: string, example: claude-opus-5-5 }
+  /v1/extract:
+    post:
+      summary: Read a document and return validated fields
+      description: Each call is a paid model call and is rate-limited per API key.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [type, file]
+              properties:
+                type: { $ref: "#/components/schemas/DocType" }
+                file: { type: string, format: binary, description: PNG, JPEG, WebP, GIF or PDF, up to 10 MB }
+          application/json:
+            schema:
+              type: object
+              required: [type, media_type, data]
+              properties:
+                type: { $ref: "#/components/schemas/DocType" }
+                media_type: { type: string, enum: [image/png, image/jpeg, image/webp, image/gif, application/pdf] }
+                data: { type: string, description: Base64 file contents with no line breaks }
+      responses:
+        "200":
+          description: Read and checked. `decision` says whether a person needs to look.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExtractResult" }
+              example:
+                id: 7c1d1f8e-3c47-4c55-9d6b-3d2f3f3f0a11
+                type: receipt
+                decision: needs_review
+                flags: []
+                notes: ""
+                model: claude-opus-5-5
+                fields:
+                  merchant_name: { value: Labone Pharmacy, normalized: Labone Pharmacy, confidence: 0.97, status: accepted, issues: [] }
+                  date: { value: "2026-08-21", normalized: "2026-08-21", confidence: 0.93, status: accepted, issues: [] }
+                  currency: { value: GHS, normalized: GHS, confidence: 0.96, status: accepted, issues: [] }
+                  subtotal: { value: "80.00", normalized: 8000, confidence: 0.95, status: needs_review, issues: [totals_mismatch] }
+                  tax: { value: "12.00", normalized: 1200, confidence: 0.95, status: needs_review, issues: [totals_mismatch] }
+                  total: { value: "99.00", normalized: 9900, confidence: 0.96, status: needs_review, issues: [totals_mismatch] }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "422":
+          description: The model declined to read the document or returned something unusable. Send it to a person.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  type: { $ref: "#/components/schemas/DocType" }
+                  decision: { const: rejected }
+                  reason: { type: string }
+                  model: { type: string }
+        "429":
+          description: Rate limit reached. Retry after the number of seconds in `Retry-After`.
+          headers:
+            Retry-After: { schema: { type: integer } }
+  /v1/review:
+    get:
+      summary: List review items
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending, resolved] }
+      responses:
+        "200":
+          description: Items, oldest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/ReviewItem" } }
+  /v1/review/{id}:
+    get:
+      summary: Get one review item
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      responses:
+        "200": { description: The item, content: { application/json: { schema: { $ref: "#/components/schemas/ReviewItem" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/review/{id}/resolve:
+    post:
+      summary: Confirm or correct a reviewed document
+      parameters: [{ $ref: "#/components/parameters/Id" }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                corrections:
+                  type: object
+                  additionalProperties: { type: [string, "null"] }
+                  description: Field name to the corrected value. Unknown field names are ignored. Send {} to confirm as-is.
+            example: { corrections: { total: "92.00" } }
+      responses:
+        "200": { description: Resolved item, content: { application/json: { schema: { $ref: "#/components/schemas/ReviewItem" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: One of the keys in DOCUREAD_API_KEYS
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+  schemas:
+    DocType:
+      type: string
+      enum: [receipt, invoice, certificate]
+      description: |
+        receipt: merchant_name, date, currency, subtotal, tax, total
+        invoice: invoice_number, issuer_name, customer_name, issue_date, due_date, currency, subtotal, tax, total
+        certificate: holder_name, certificate_type, issuer, certificate_number, issue_date, expiry_date
+    Issue:
+      type: string
+      enum: [missing_required, low_confidence, invalid_date, invalid_money, invalid_currency, totals_mismatch, dates_out_of_order]
+    Field:
+      type: object
+      required: [value, normalized, confidence, status, issues]
+      properties:
+        value: { type: [string, "null"], description: As the model read it }
+        normalized:
+          description: ISO date, integer minor units for money, ISO 4217 currency code, or trimmed text. null if missing or invalid.
+          type: [string, integer, "null"]
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        status: { type: string, enum: [accepted, needs_review] }
+        issues: { type: array, items: { $ref: "#/components/schemas/Issue" } }
+    ExtractResult:
+      type: object
+      required: [id, type, decision, fields, flags, notes, model]
+      properties:
+        id: { type: string }
+        type: { $ref: "#/components/schemas/DocType" }
+        decision: { type: string, enum: [accepted, needs_review] }
+        fields: { type: object, additionalProperties: { $ref: "#/components/schemas/Field" } }
+        flags:
+          type: array
+          items: { type: string }
+          description: Facts that need no review but matter, e.g. "expired" on a certificate.
+        notes: { type: string, description: The model's note about anything unusual }
+        model: { type: string }
+    ReviewItem:
+      type: object
+      properties:
+        id: { type: string }
+        type: { $ref: "#/components/schemas/DocType" }
+        createdAt: { type: string, format: date-time }
+        status: { type: string, enum: [pending, resolved] }
+        fields: { type: object, additionalProperties: { $ref: "#/components/schemas/Field" } }
+        notes: { type: string }
+        resolvedAt: { type: string, format: date-time }
+        corrections: { type: object, additionalProperties: { type: [string, "null"] } }

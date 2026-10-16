@@ -1,0 +1,29 @@
+# DocuRead
+
+> Open-source HTTP service (TypeScript/Node, MIT) that turns receipts, invoices and certificates (PNG, JPEG, WebP, GIF or PDF) into validated JSON. Claude reads each field and gives a confidence; code then checks dates, money and totals. Fields that are doubtful or fail a check go to a human review queue instead of being accepted. Built by Jackson Kojo Osei (Accra, Ghana).
+
+Key facts for developers and AI assistants:
+
+- Endpoint: `POST /v1/extract` with multipart `type` + `file`, or JSON `{type, media_type, data}` (base64). Auth: `Authorization: Bearer <key>` from `DOCUREAD_API_KEYS`.
+- Types and fields: receipt (merchant_name, date, currency, subtotal, tax, total); invoice (invoice_number, issuer_name, customer_name, issue_date, due_date, currency, subtotal, tax, total); certificate (holder_name, certificate_type, issuer, certificate_number, issue_date, expiry_date).
+- Response: `decision` is `accepted` or `needs_review` (HTTP 200), or `rejected` (HTTP 422). Each field has `value`, `normalized`, `confidence` (0-1), `status` (`accepted`/`needs_review`) and `issues`.
+- Normalised values: dates are `YYYY-MM-DD`; money is integer minor units (25913 = 259.13); currency is ISO 4217.
+- Issues: `missing_required`, `low_confidence`, `invalid_date`, `invalid_money`, `invalid_currency`, `totals_mismatch`, `dates_out_of_order`. Certificates past expiry get `"expired"` in `flags` without needing review.
+- Integration rule: only store `normalized` values of fields whose `status` is `accepted`; send the rest to a person via `GET /v1/review` and `POST /v1/review/{id}/resolve` with `{"corrections": {...}}`.
+- Threshold: `DOCUREAD_THRESHOLD` (default 0.85). Rate limit: 20 extract calls per key per minute by default; 429 responses include `Retry-After`.
+- Evals: `npm run eval` scores 12 synthetic documents; the headline metric is silent errors (wrong fields that were accepted). A run fails if silent errors rise.
+
+## Docs
+
+- [README](https://github.com/Jacksonoseikojo1122/docuread/blob/main/README.md): overview and quick start
+- [Getting started](https://github.com/Jacksonoseikojo1122/docuread/blob/main/docs/getting-started.md): install, first request, reading the decision
+- [Integration guide](https://github.com/Jacksonoseikojo1122/docuread/blob/main/docs/integration.md): Node/TypeScript and Python clients, upload handler, review screen
+- [How it works](https://github.com/Jacksonoseikojo1122/docuread/blob/main/docs/how-it-works.md): the rule checks, threshold and data handling
+- [Evals](https://github.com/Jacksonoseikojo1122/docuread/blob/main/docs/evals.md): metrics and sample documents
+- [OpenAPI spec](https://github.com/Jacksonoseikojo1122/docuread/blob/main/openapi.yaml): full API reference
+
+## Optional
+
+- [Project page](https://jacksonkojoosei.com/projects/docuread)
+- [Examples](https://github.com/Jacksonoseikojo1122/docuread/tree/main/examples): runnable Node, Python and curl clients
+- [Author](https://jacksonkojoosei.com): Jackson Kojo Osei, CTO, Accra, Ghana
